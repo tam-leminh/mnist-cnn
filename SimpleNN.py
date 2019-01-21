@@ -1,7 +1,10 @@
 import numpy as np
 from sklearn.datasets import load_digits
+import matplotlib
 import matplotlib.pyplot as plt
 from sklearn.model_selection import train_test_split
+from matplotlib import animation
+import time
 
 class SimpleNN:
     
@@ -77,20 +80,16 @@ class SimpleNN:
         for e in range(0, nb_epoch):
             for i in range(0, number_mini_batch):
                 if i!=number_mini_batch-1:
-                    self.W, self.b, J = fw_bk_prop(self.X_train[mini_batch*i:mini_batch*(i+1),:,:], 
-                                                   self.Y_train[mini_batch*i:mini_batch*(i+1)], 
-                                                   self.W, 
-                                                   self.b, 
-                                                   self.alpha/(l_decay*e+1))
+                    J = self.full(self.X_train[mini_batch*i:mini_batch*(i+1),:,:], 
+                               self.Y_train[mini_batch*i:mini_batch*(i+1)], 
+                               self.alpha/(l_decay*e+1))
                 else:
-                    self.W, self.b, J = fw_bk_prop(self.X_train[mini_batch*i:,:,:], 
-                                                   self.Y_train[mini_batch*i:], 
-                                                   self.W, 
-                                                   self.b, 
-                                                   self.alpha/(l_decay*e+1))
+                    J = self.full(self.X_train[mini_batch*i:,:,:], 
+                               self.Y_train[mini_batch*i:], 
+                               self.alpha/(l_decay*e+1))
 
             self.train_losses.append(J)
-            pred, test_score = fw_prop(self.X_test, self.Y_test, self.W, self.b)
+            test_score = self.run(self.X_test, self.Y_test)
             self.test_losses.append(test_score)
 
             if verbose and e%10 == 0:
@@ -124,28 +123,68 @@ class SimpleNN:
         np.savez_compressed('e' + str(self.nb_epoch) + '_b2.npz', self.b[2])
         np.savez_compressed('e' + str(self.nb_epoch) + '_b3.npz', self.b[3])
         
+    def run(self, X, Y):
+        m = X.shape[0]
+        n_0 = X.shape[1]*X.shape[2]
+        n_1 = self.W[1].shape[0]
+        n_2 = self.W[2].shape[0]
+        n_3 = self.W[3].shape[0]
+        self.A_0 = X.reshape((m,n_0))
 
+        self.Z_1 = np.dot(self.A_0.reshape((m,n_0)), self.W[1].T) + self.b[1]
+        self.A_1 = np.vectorize(leaky_relu)(self.Z_1)
 
-def leaky_relu(x):
-    if x >=0:
-        return x
-    else:
-        return -0.01*x
-    
-def d_leaky_relu(x):
-    if x >=0:
-        return 1.0
-    else:
-        return -0.01
-    
-def softmax(x):
-    x -= np.max(x, axis=1).reshape((x.shape[0],1))
-    result = (np.exp(x))/(np.sum(np.exp(x), axis=1, keepdims=True))
-    return result
-    
-def loss(pred, y):
-    loss = -1.*np.sum(y*np.log(pred+0.001)/y.shape[0])
-    return loss
+        self.Z_2 = np.dot(self.A_1.reshape((m,n_1)), self.W[2].T) + self.b[2]
+        self.A_2 = np.vectorize(leaky_relu)(self.Z_2)
+
+        self.Z_3 = np.dot(self.A_2.reshape((m,n_2)), self.W[3].T) + self.b[3]
+        self.A_3 = softmax(self.Z_3)
+
+        score = loss(self.A_3, Y)
+        return score
+
+    def full(self, X, Y, alpha):
+        m = X.shape[0]
+        n_0 = X.shape[1]*X.shape[2]
+        n_1 = self.W[1].shape[0]
+        n_2 = self.W[2].shape[0]
+        n_3 = self.W[3].shape[0]
+        self.A_0 = X.reshape((m,n_0))
+
+        self.Z_1 = np.dot(self.A_0.reshape((m,n_0)), self.W[1].T) + self.b[1]
+        self.A_1 = np.vectorize(leaky_relu)(self.Z_1)
+        self.dA_1 = np.vectorize(d_leaky_relu)(self.Z_1)
+
+        self.Z_2 = np.dot(self.A_1.reshape((m,n_1)), self.W[2].T) + self.b[2]
+        self.A_2 = np.vectorize(leaky_relu)(self.Z_2)
+        self.dA_2 = np.vectorize(d_leaky_relu)(self.Z_2)
+
+        self.Z_3 = np.dot(self.A_2.reshape((m,n_2)), self.W[3].T) + self.b[3]
+        self.A_3 = softmax(self.Z_3)
+
+        score = loss(self.A_3, Y)
+
+        self.dZ_3 = self.A_3 - Y
+        self.dW_3 = (1./m)*np.dot(self.dZ_3.T, self.A_2)
+        self.db_3 = (1./m)*np.sum(self.dZ_3, axis=0, keepdims=True)
+
+        self.dZ_2 = np.dot(self.dZ_3, self.W[3])*self.dA_2
+        self.dW_2 = (1./m)*np.dot(self.dZ_2.T, self.A_1)
+        self.db_2 = (1./m)*np.sum(self.dZ_2, axis=0, keepdims=True)
+
+        self.dZ_1 = np.dot(self.dZ_2, self.W[2])*self.dA_1
+        self.dW_1 = (1./m)*np.dot(self.dZ_1.T, self.A_0)
+        self.db_1 = (1./m)*np.sum(self.dZ_1, axis=0, keepdims=True)
+
+        self.W[1]-=self.alpha*self.dW_1
+        self.W[2]-=self.alpha*self.dW_2
+        self.W[3]-=self.alpha*self.dW_3
+        self.b[1]-=self.alpha*self.db_1
+        self.b[2]-=self.alpha*self.db_2
+        self.b[3]-=self.alpha*self.db_3
+
+        return score
+
 
 def fw_prop(X, Y, W, b):
     m = X.shape[0]
@@ -208,6 +247,27 @@ def fw_bk_prop(X, Y, W, b, alpha):
     b[3]-=alpha*db_3
     
     return W, b, score
+
+def leaky_relu(x):
+    if x >=0:
+        return x
+    else:
+        return -0.01*x
+    
+def d_leaky_relu(x):
+    if x >=0:
+        return 1.0
+    else:
+        return -0.01
+    
+def softmax(x):
+    x -= np.max(x, axis=1).reshape((x.shape[0],1))
+    result = (np.exp(x))/(np.sum(np.exp(x), axis=1, keepdims=True))
+    return result
+    
+def loss(pred, y):
+    loss = -1.*np.sum(y*np.log(pred+0.001)/y.shape[0])
+    return loss
     
 def normalize_data(data, epsilon=10e-8):
     epsilon = 10e-8
@@ -220,12 +280,34 @@ def unnormalize_data(norm_data, mu, sigma, epsilon=10e-8):
     data = norm_data*(sigma+epsilon) + mu
     return data
         
+
+
+def init():
+    im.set_data(np.zeros((nx, ny)))
+    
+def animate(i):
+    im.set_data(nn.X_test[i])
+    return im
+    
+
+
     
 if __name__=='__main__':
     
     nn = SimpleNN()
     nn.load_data()
     nn.initialize_weights()
+
+    #nx = 8
+    #ny = 8
+    #fig, ax = plt.subplots()
+    #data = nn.X_test[0]
+    #print(nn.X_test[0])
+#
+    #im=plt.imshow(nn.X_test[0], cmap='gist_gray_r', vmin=0, vmax=1)
+    #ani = animation.FuncAnimation(fig, animate, init_func=init, frames=100,
+    #                               interval=1000, blit=False)
+    #plt.show()
     nn.train(l_rate=0.01, l_decay=0, mini_batch=64, nb_epoch=500, verbose=True, plot=True)
     nn.simple_prediction(359)
     nn.save_weights('.')
