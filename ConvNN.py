@@ -1,3 +1,15 @@
+# -*- coding: utf-8 -*-
+"""
+Simple Deep Convolutional Neural Network for sklearn-MNIST
+Input: 8x8 greyscale images
+Layer 1: Conv 3x3 x16 - Leaky ReLU
+Layer 2: FC 128 - Leaky ReLU
+Layer 3: FC 128 - Leaky ReLU
+Layer 4: FC 10 - Softmax
+
+@author: Tâm Le Minh
+"""
+
 import numpy as np
 from sklearn.datasets import load_digits
 import matplotlib.pyplot as plt

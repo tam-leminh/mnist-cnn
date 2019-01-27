@@ -1,3 +1,14 @@
+# -*- coding: utf-8 -*-
+"""
+Simple Deep Neural Network for sklearn-MNIST
+Input: 8x8 greyscale images
+Layer 1: FC 128 - Leaky ReLU
+Layer 2: FC 128 - Leaky ReLU
+Layer 3: FC 10 - Softmax
+
+@author: Tâm Le Minh
+"""
+
 import numpy as np
 from sklearn.datasets import load_digits
 import matplotlib
@@ -279,17 +290,6 @@ def normalize_data(data, epsilon=10e-8):
 def unnormalize_data(norm_data, mu, sigma, epsilon=10e-8):
     data = norm_data*(sigma+epsilon) + mu
     return data
-        
-
-
-def init():
-    im.set_data(np.zeros((nx, ny)))
-    
-def animate(i):
-    im.set_data(nn.X_test[i])
-    return im
-    
-
 
     
 if __name__=='__main__':
