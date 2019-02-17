@@ -11,11 +11,8 @@ Layer 3: FC 10 - Softmax
 
 import numpy as np
 from sklearn.datasets import load_digits
-import matplotlib
 import matplotlib.pyplot as plt
 from sklearn.model_selection import train_test_split
-from matplotlib import animation
-import time
 
 class SimpleNN:
     
@@ -86,21 +83,25 @@ class SimpleNN:
     def train(self, l_rate=0.01, l_decay=0, mini_batch=64, nb_epoch=100, verbose=True, plot=False):
         self.mini_batch = mini_batch
         self.nb_epoch = nb_epoch
-        number_mini_batch = self.n_sample_train/self.mini_batch + 1
+        number_mini_batch = int(self.n_sample_train/self.mini_batch + 1)
         self.alpha = l_rate
         for e in range(0, nb_epoch):
             for i in range(0, number_mini_batch):
                 if i!=number_mini_batch-1:
-                    J = self.full(self.X_train[mini_batch*i:mini_batch*(i+1),:,:], 
-                               self.Y_train[mini_batch*i:mini_batch*(i+1)], 
-                               self.alpha/(l_decay*e+1))
+                    self.W, self.b, J = fw_bk_prop(self.X_train[mini_batch*i:mini_batch*(i+1),:,:], 
+                                                   self.Y_train[mini_batch*i:mini_batch*(i+1)], 
+                                                   self.W, 
+                                                   self.b, 
+                                                   self.alpha/(l_decay*e+1))
                 else:
-                    J = self.full(self.X_train[mini_batch*i:,:,:], 
-                               self.Y_train[mini_batch*i:], 
-                               self.alpha/(l_decay*e+1))
+                    self.W, self.b, J = fw_bk_prop(self.X_train[mini_batch*i:,:,:], 
+                                                   self.Y_train[mini_batch*i:], 
+                                                   self.W, 
+                                                   self.b, 
+                                                   self.alpha/(l_decay*e+1))
 
             self.train_losses.append(J)
-            test_score = self.run(self.X_test, self.Y_test)
+            pred, test_score = fw_prop(self.X_test, self.Y_test, self.W, self.b)
             self.test_losses.append(test_score)
 
             if verbose and e%10 == 0:
@@ -109,22 +110,40 @@ class SimpleNN:
         if plot:
             self.plot_losses()
                 
-    def simple_prediction(self, idx_in_test_set, plot=True):
+    def simple_prediction(self, idx_in_test_set, verbose=True, plot=True):
         data = self.X_test[idx_in_test_set,:,:].reshape((1,8,8))
         image = unnormalize_data(data, self.mu_X, self.sigma_X)
         label = self.Y_test[idx_in_test_set,:].reshape((1,10))
         
         pred, score = fw_prop(data, label, self.W, self.b)
-        print("Truth: " + str(np.argmax(label)))
-        print("Predicted: " + str(np.argmax(pred)))
+        label_true = np.argmax(label)
+        label_pred = np.argmax(pred)
         
+        if verbose:
+            print("Truth: " + str(label_true))
+            print("Predicted: " + str(label_pred))
         if plot:
-            plt.imshow(image[0])
-            plt.show()
+            plt.figure(figsize=(6,3))
+            plt.subplot(1,2,1)
+            plot_image(pred.reshape((10,)), label_true, image[0])
+            plt.subplot(1,2,2)
+            plot_value_array(pred.reshape((10,)), label_true)
+            
+        if label_true == label_pred:
+            success = 1.
+        else:
+            success = 0.
+            
+        return success
+            
+    def test_accuracy(self):
+        counter = 0
+        for i in range(0, self.X_test.shape[0]):
+            counter += self.simple_prediction(i, verbose=False, plot=False)
+        return counter/self.X_test.shape[0]
         
     def plot_losses(self):
         plt.plot(np.arange(self.nb_epoch), self.train_losses, np.arange(self.nb_epoch), self.test_losses)
-        plt.show()
         
     def save_weights(self, path):
         np.savez_compressed('e' + str(self.nb_epoch) + '_w1.npz', self.W[1])
@@ -134,68 +153,28 @@ class SimpleNN:
         np.savez_compressed('e' + str(self.nb_epoch) + '_b2.npz', self.b[2])
         np.savez_compressed('e' + str(self.nb_epoch) + '_b3.npz', self.b[3])
         
-    def run(self, X, Y):
-        m = X.shape[0]
-        n_0 = X.shape[1]*X.shape[2]
-        n_1 = self.W[1].shape[0]
-        n_2 = self.W[2].shape[0]
-        n_3 = self.W[3].shape[0]
-        self.A_0 = X.reshape((m,n_0))
 
-        self.Z_1 = np.dot(self.A_0.reshape((m,n_0)), self.W[1].T) + self.b[1]
-        self.A_1 = np.vectorize(leaky_relu)(self.Z_1)
 
-        self.Z_2 = np.dot(self.A_1.reshape((m,n_1)), self.W[2].T) + self.b[2]
-        self.A_2 = np.vectorize(leaky_relu)(self.Z_2)
-
-        self.Z_3 = np.dot(self.A_2.reshape((m,n_2)), self.W[3].T) + self.b[3]
-        self.A_3 = softmax(self.Z_3)
-
-        score = loss(self.A_3, Y)
-        return score
-
-    def full(self, X, Y, alpha):
-        m = X.shape[0]
-        n_0 = X.shape[1]*X.shape[2]
-        n_1 = self.W[1].shape[0]
-        n_2 = self.W[2].shape[0]
-        n_3 = self.W[3].shape[0]
-        self.A_0 = X.reshape((m,n_0))
-
-        self.Z_1 = np.dot(self.A_0.reshape((m,n_0)), self.W[1].T) + self.b[1]
-        self.A_1 = np.vectorize(leaky_relu)(self.Z_1)
-        self.dA_1 = np.vectorize(d_leaky_relu)(self.Z_1)
-
-        self.Z_2 = np.dot(self.A_1.reshape((m,n_1)), self.W[2].T) + self.b[2]
-        self.A_2 = np.vectorize(leaky_relu)(self.Z_2)
-        self.dA_2 = np.vectorize(d_leaky_relu)(self.Z_2)
-
-        self.Z_3 = np.dot(self.A_2.reshape((m,n_2)), self.W[3].T) + self.b[3]
-        self.A_3 = softmax(self.Z_3)
-
-        score = loss(self.A_3, Y)
-
-        self.dZ_3 = self.A_3 - Y
-        self.dW_3 = (1./m)*np.dot(self.dZ_3.T, self.A_2)
-        self.db_3 = (1./m)*np.sum(self.dZ_3, axis=0, keepdims=True)
-
-        self.dZ_2 = np.dot(self.dZ_3, self.W[3])*self.dA_2
-        self.dW_2 = (1./m)*np.dot(self.dZ_2.T, self.A_1)
-        self.db_2 = (1./m)*np.sum(self.dZ_2, axis=0, keepdims=True)
-
-        self.dZ_1 = np.dot(self.dZ_2, self.W[2])*self.dA_1
-        self.dW_1 = (1./m)*np.dot(self.dZ_1.T, self.A_0)
-        self.db_1 = (1./m)*np.sum(self.dZ_1, axis=0, keepdims=True)
-
-        self.W[1]-=self.alpha*self.dW_1
-        self.W[2]-=self.alpha*self.dW_2
-        self.W[3]-=self.alpha*self.dW_3
-        self.b[1]-=self.alpha*self.db_1
-        self.b[2]-=self.alpha*self.db_2
-        self.b[3]-=self.alpha*self.db_3
-
-        return score
-
+def leaky_relu(x):
+    if x >=0:
+        return x
+    else:
+        return -0.01*x
+    
+def d_leaky_relu(x):
+    if x >=0:
+        return 1.0
+    else:
+        return -0.01
+    
+def softmax(x):
+    x -= np.max(x, axis=1).reshape((x.shape[0],1))
+    result = (np.exp(x))/(np.sum(np.exp(x), axis=1, keepdims=True))
+    return result
+    
+def loss(pred, y):
+    loss = -1.*np.sum(y*np.log(pred+0.001)/y.shape[0])
+    return loss
 
 def fw_prop(X, Y, W, b):
     m = X.shape[0]
@@ -258,27 +237,6 @@ def fw_bk_prop(X, Y, W, b, alpha):
     b[3]-=alpha*db_3
     
     return W, b, score
-
-def leaky_relu(x):
-    if x >=0:
-        return x
-    else:
-        return -0.01*x
-    
-def d_leaky_relu(x):
-    if x >=0:
-        return 1.0
-    else:
-        return -0.01
-    
-def softmax(x):
-    x -= np.max(x, axis=1).reshape((x.shape[0],1))
-    result = (np.exp(x))/(np.sum(np.exp(x), axis=1, keepdims=True))
-    return result
-    
-def loss(pred, y):
-    loss = -1.*np.sum(y*np.log(pred+0.001)/y.shape[0])
-    return loss
     
 def normalize_data(data, epsilon=10e-8):
     epsilon = 10e-8
@@ -290,14 +248,44 @@ def normalize_data(data, epsilon=10e-8):
 def unnormalize_data(norm_data, mu, sigma, epsilon=10e-8):
     data = norm_data*(sigma+epsilon) + mu
     return data
+        
+def plot_image(predictions_array, true_label, img):
+    predictions_array, true_label, img
+    plt.grid(False)
+    plt.xticks([])
+    plt.yticks([])
 
-    
+    plt.imshow(img, cmap=plt.cm.binary)
+
+    predicted_label = np.argmax(predictions_array)
+    if predicted_label == true_label:
+        color = 'blue'
+    else:
+        color = 'red'
+
+    plt.xlabel("{} {:2.0f}% ({})".format(predicted_label,
+                                100*np.max(predictions_array),
+                                true_label),
+                                color=color)
+
+def plot_value_array(predictions_array, true_label):
+    plt.grid(False)
+    plt.xticks([])
+    plt.yticks([])
+    thisplot = plt.bar(range(10), predictions_array, color="#777777")
+    plt.ylim([0, 1]) 
+    predicted_label = np.argmax(predictions_array)
+
+    thisplot[predicted_label].set_color('red')
+    thisplot[true_label].set_color('blue')
+	
 if __name__=='__main__':
-    
-    nn = SimpleNN()
-    nn.load_data()
-    nn.initialize_weights()
-    #nn.load_weights("save/SimpleNN/", "500")
-    nn.train(l_rate=0.01, l_decay=0, mini_batch=64, nb_epoch=500, verbose=True, plot=True)
-    nn.simple_prediction(359)
-    nn.save_weights('.')
+	nn = SimpleNN()
+	nn.load_data()
+	nn.initialize_weights()
+	#nn.load_weights("../../save/SimpleNN/", "500")
+	nn.train(l_rate=0.01, l_decay=0, mini_batch=64, nb_epoch=500, verbose=True, plot=True)
+	nn.simple_prediction(80)
+	nn.save_weights('.')
+	nn.test_accuracy()
+

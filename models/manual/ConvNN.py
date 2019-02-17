@@ -93,7 +93,7 @@ class ConvNN:
     def train(self, l_rate=0.01, l_decay=0, mini_batch=64, nb_epoch=100, verbose=True, plot=False):
         self.mini_batch = mini_batch
         self.nb_epoch = nb_epoch
-        number_mini_batch = self.n_sample_train/self.mini_batch + 1
+        number_mini_batch = int(self.n_sample_train/self.mini_batch + 1)
         self.alpha = l_rate
         for e in range(0, nb_epoch):
             for i in range(0, number_mini_batch):
@@ -120,17 +120,37 @@ class ConvNN:
         if plot:
             self.plot_losses()
                 
-    def simple_prediction(self, idx_in_test_set, plot=True):
+    def simple_prediction(self, idx_in_test_set, verbose=True, plot=True):
         data = self.X_test[idx_in_test_set,:,:].reshape((1,8,8))
         image = unnormalize_data(data, self.mu_X, self.sigma_X)
         label = self.Y_test[idx_in_test_set,:].reshape((1,10))
         
         pred, score = fw_prop(data, label, self.W, self.b)
-        print("Truth: " + str(np.argmax(label)))
-        print("Predicted: " + str(np.argmax(pred)))
+        label_true = np.argmax(label)
+        label_pred = np.argmax(pred)
         
+        if verbose:
+            print("Truth: " + str(label_true))
+            print("Predicted: " + str(label_pred))
         if plot:
-            plt.imshow(image[0])
+            plt.figure(figsize=(6,3))
+            plt.subplot(1,2,1)
+            plot_image(pred.reshape((10,)), label_true, image[0])
+            plt.subplot(1,2,2)
+            plot_value_array(pred.reshape((10,)), label_true)
+            
+        if label_true == label_pred:
+            success = 1.
+        else:
+            success = 0.
+            
+        return success
+    
+    def test_accuracy(self):
+        counter = 0
+        for i in range(0, self.X_test.shape[0]):
+            counter += self.simple_prediction(i, verbose=False, plot=False)
+        return counter/self.X_test.shape[0]
         
     def plot_losses(self):
         plt.plot(np.arange(self.nb_epoch), self.train_losses, np.arange(self.nb_epoch), self.test_losses)
@@ -289,13 +309,45 @@ def unnormalize_data(norm_data, mu, sigma, epsilon=10e-8):
     data = norm_data*(sigma+epsilon) + mu
     return data
         
-    
+def plot_image(predictions_array, true_label, img):
+    predictions_array, true_label, img
+    plt.grid(False)
+    plt.xticks([])
+    plt.yticks([])
+
+    plt.imshow(img, cmap=plt.cm.binary)
+
+    predicted_label = np.argmax(predictions_array)
+    if predicted_label == true_label:
+        color = 'blue'
+    else:
+        color = 'red'
+
+    plt.xlabel("{} {:2.0f}% ({})".format(predicted_label,
+                                100*np.max(predictions_array),
+                                true_label),
+                                color=color)
+
+def plot_value_array(predictions_array, true_label):
+    plt.grid(False)
+    plt.xticks([])
+    plt.yticks([])
+    thisplot = plt.bar(range(10), predictions_array, color="#777777")
+    plt.ylim([0, 1]) 
+    predicted_label = np.argmax(predictions_array)
+
+    thisplot[predicted_label].set_color('red')
+    thisplot[true_label].set_color('blue')
+   
+   
 if __name__=='__main__':
-    nn = ConvNN()
-    nn.load_data()
-    nn.initialize_weights()
-    #nn.load_weights("save/ConvNN/", "100")
-    nn.train(l_rate=0.01, l_decay=0, mini_batch=64, nb_epoch=100, verbose=True, plot=True)
-    nn.simple_prediction(80)
-    nn.save_weights('.')
+	nn = ConvNN()
+	nn.load_data()
+	nn.initialize_weights()
+	#nn.load_weights("../../save/ConvNN/", "500")
+	nn.train(l_rate=0.02, l_decay=0, mini_batch=64, nb_epoch=500, verbose=True, plot=True)
+	nn.simple_prediction(10)
+	nn.save_weights('.')
+	nn.test_accuracy()
+	np.zeros((2,2,2,2))
 
