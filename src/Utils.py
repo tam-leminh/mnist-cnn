@@ -1,4 +1,5 @@
 import numpy as np
+import matplotlib.pyplot as plt
                  
 def normalize_data(data, mu=None, sigma=None, epsilon=10e-8):
     epsilon = 10e-8
@@ -13,7 +14,7 @@ def unnormalize_data(norm_data, mu, sigma, epsilon=10e-8):
     data = norm_data*(sigma+epsilon) + mu
     return data
         
-def plot_image(i, predictions_array, true_label, img):
+def plot_image(i, predictions_array, true_label, img, class_names):
     predictions_array, true_label, img = predictions_array[i], true_label.reshape((true_label.shape[0],))[i], img[i]
     plt.grid(False)
     plt.xticks([])
@@ -43,3 +44,11 @@ def plot_value_array(i, predictions_array, true_label):
 
     thisplot[predicted_label].set_color('red')
     thisplot[true_label].set_color('blue')
+    
+def save_model(model, path):
+    model.save(path)
+    
+def load_model(path):
+    import keras
+    model = keras.models.load_model(path)
+    return model
